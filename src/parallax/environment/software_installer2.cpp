@@ -172,6 +172,9 @@ namespace parallax
             std::string repo_url =
                 parallax::config::ConfigManager::GetInstance().GetConfigValue(
                     parallax::config::KEY_PRAKASA_GIT_REPO_URL);
+            std::string git_branch =
+                parallax::config::ConfigManager::GetInstance().GetConfigValue(
+                    parallax::config::KEY_PRAKASA_GIT_BRANCH);
 
             const std::string &proxy_url = context_->GetProxyUrl();
 
@@ -185,26 +188,26 @@ namespace parallax
             if (is_update_mode)
             {
                 // Project is installed and has updates, only execute git pull update
-                std::string pull_cmd = "cd ~/prakasa && git pull";
+                std::string pull_cmd = "cd ~/prakasa && git checkout " + git_branch + " && git pull";
                 if (!proxy_url.empty())
                 {
-                    pull_cmd = "cd ~/prakasa && ALL_PROXY=" + proxy_url + " git pull";
+                    pull_cmd = "cd ~/prakasa && git checkout " + git_branch + " && ALL_PROXY=" + proxy_url + " git pull";
                 }
                 commands.emplace_back("update_parallax", pull_cmd, 300, false);
             }
             else
             {
-                // Project not installed, check if parallax directory exists, decide
+                // Project not installed, check if prakasa directory exists, decide
                 // whether to clone or pull
                 auto [check_dir_code, check_dir_output] = executor_->ExecuteWSL(
-                    "ls -la ~/parallax/.git 2>/dev/null || echo 'not found'", 30);
+                    "ls -la ~/prakasa/.git 2>/dev/null || echo 'not found'", 30);
 
                 if (check_dir_code == 0 &&
                     check_dir_output.find("not found") == std::string::npos)
                 {
                     // Directory exists, check if it's a git repository
                     auto [check_git_code, check_git_output] = executor_->ExecuteWSL(
-                        "cd ~/parallax && git branch 2>/dev/null || echo 'not git'",
+                        "cd ~/prakasa && git branch 2>/dev/null || echo 'not git'",
                         30);
 
                     if (check_git_code == 0 &&
@@ -214,11 +217,11 @@ namespace parallax
                         info_log(
                             "[ENV] Prakasa directory exists, updating with git "
                             "pull...");
-                        std::string pull_cmd = "cd ~/prakasa && git pull";
+                        std::string pull_cmd = "cd ~/prakasa && git checkout " + git_branch + " && git pull";
                         if (!proxy_url.empty())
                         {
                             pull_cmd =
-                                "cd ~/prakasa && ALL_PROXY=" + proxy_url + " git pull";
+                                "cd ~/prakasa && git checkout " + git_branch + " && ALL_PROXY=" + proxy_url + " git pull";
                         }
                         commands.emplace_back("update_parallax", pull_cmd, 300, false);
                     }
@@ -237,7 +240,7 @@ namespace parallax
                         {
                             clone_cmd += "ALL_PROXY=" + proxy_url + " ";
                         }
-                        clone_cmd += "git clone " + repo_url;
+                        clone_cmd += "git clone -b " + git_branch + " " + repo_url;
                         commands.emplace_back("clone_prakasa", clone_cmd, 600, false);
                     }
                 }
@@ -251,7 +254,7 @@ namespace parallax
                     {
                         clone_cmd += "ALL_PROXY=" + proxy_url + " ";
                     }
-                    clone_cmd += "git clone " + repo_url;
+                    clone_cmd += "git clone -b " + git_branch + " " + repo_url;
                     commands.emplace_back("clone_prakasa", clone_cmd, 600, false);
                 }
             }
@@ -368,22 +371,25 @@ namespace parallax
 
         bool ParallaxProjectInstaller::IsParallaxProjectInstalled()
         {
-            // Check if parallax project is installed (need to check in virtual
+            // Check if prakasa project is installed (need to check in virtual
             // environment)
             auto [check_code, check_output] = executor_->ExecuteWSL(
-                "cd ~/parallax && [ -d ./venv ] && source ./venv/bin/activate && pip "
-                "list | grep parallax");
+                "cd ~/prakasa && [ -d ./venv ] && source ./venv/bin/activate && pip "
+                "list | grep prakasa");
             return (check_code == 0 && !check_output.empty());
         }
 
         bool ParallaxProjectInstaller::HasParallaxProjectGitUpdates()
         {
             const std::string &proxy_url = context_->GetProxyUrl();
+            std::string git_branch =
+                parallax::config::ConfigManager::GetInstance().GetConfigValue(
+                    parallax::config::KEY_PRAKASA_GIT_BRANCH);
 
-            // Check if Parallax project has git updates
+            // Check if Prakasa project has git updates
             // First check if git repository exists
             auto [check_git_code, check_git_output] = executor_->ExecuteWSL(
-                "cd ~/parallax && git rev-parse --is-inside-work-tree 2>/dev/null", 30);
+                "cd ~/prakasa && git rev-parse --is-inside-work-tree 2>/dev/null", 30);
 
             if (check_git_code != 0)
             {
@@ -408,7 +414,7 @@ namespace parallax
 
             // Check if there are differences between local and remote
             auto [diff_code, diff_output] = executor_->ExecuteWSL(
-                "cd ~/prakasa && git rev-list HEAD...origin/main --count 2>/dev/null",
+                "cd ~/prakasa && git rev-list HEAD...origin/" + git_branch + " --count 2>/dev/null",
                 30);
 
             if (diff_code == 0 && !diff_output.empty())
